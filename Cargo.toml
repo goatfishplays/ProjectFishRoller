@@ -1,0 +1,15 @@
+[package]
+name = "ProjectFishingRoller"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# someone remind me to figure out which parts I need so it isn't just "full" later
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+
+async-hid = "0.5"
+futures-lite = "2.5"
+
+
+vigem-client = "0.1"
