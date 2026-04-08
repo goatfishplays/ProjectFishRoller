@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let mut g_x = 0.0;
     let mut g_y = 0.0;
     let mut g_z = 0.0;
-    let mut pitch = 0.0;
+    let mut pitch;
     let mut roll = 0.0;
 
     loop {
@@ -193,23 +193,23 @@ async fn main() -> anyhow::Result<()> {
         let n_y = g_y / mag;
         let n_z = g_z / mag;
 
-        if inputs[20] == 2 {
-            // if within orig range
-            pitch = f32::atan2(n_z, f32::sqrt(n_x * n_x + n_y * n_y)).to_degrees();
-            pitch += PITCH_OFFSET;
+        let new_pitch =
+            f32::atan2(n_z, f32::sqrt(n_x * n_x + n_y * n_y)).to_degrees() + PITCH_OFFSET;
+        if inputs[20] == 2 || f32::abs(new_pitch) < 20.0 {
+            pitch = new_pitch;
         } else {
-            pitch = f32::signum(pitch) * 90.0;
+            pitch = f32::signum(new_pitch) * 90.0;
         }
 
         // if f32::abs(pitch) < 75.0 {
         let new_roll = f32::atan2(n_x, n_y).to_degrees() + ROLL_OFFSET;
-        // let roll_mult = 1.0 - f32::abs(n_z); // as it approaches high pitch causes unstable roll
-        let roll_mult = if inputs[20] == 2 {
-            // as it approaches high pitch causes unstable roll
-            1.0 - f32::abs(n_z)
-        } else {
-            0.005
-        };
+        let roll_mult = 1.0 - f32::abs(n_z); // as it approaches high pitch causes unstable roll
+        // let roll_mult = if inputs[20] == 2 {
+        //     // as it approaches high pitch causes unstable roll
+        //     1.0 - f32::abs(n_z)
+        // } else {
+        //     0.005
+        // };
         roll = (1.0 - roll_mult) * roll + roll_mult * new_roll;
         // }
 
