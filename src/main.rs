@@ -2,6 +2,9 @@ use async_hid::{AsyncHidRead, Device, HidBackend};
 use futures_lite::StreamExt;
 use vigem_client::XButtons;
 
+const PITCH_OFFSET: f32 = 0.0;
+const ROLL_OFFSET: f32 = 0.0;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let hid_backend = HidBackend::default();
@@ -43,15 +46,17 @@ async fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let mut x_old = 0.0;
-    let mut y_old = 0.0;
-    let mut z_old = 0.0;
+    let mut g_x = 0.0;
+    let mut g_y = 0.0;
+    let mut g_z = 0.0;
+    let mut pitch = 0.0;
+    let mut roll = 0.0;
 
     loop {
         reader.read_input_report(&mut inputs).await?;
         // tokio::time::sleep(Duration::from_millis(100)).await;
-        // println!(
-        //     "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        // print!(
+        //     "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
         //     inputs[19] as i8,
         //     inputs[20],
         //     inputs[21] as i8,
@@ -172,15 +177,56 @@ async fn main() -> anyhow::Result<()> {
 
         // [24]  idk
 
-        // noise reduction
-        let x = (inputs[19] as i8 as f32) * 0.95 + x_old * 0.05;
-        let y = (inputs[21] as i8 as f32) * 0.95 + y_old * 0.05;
-        let z = (inputs[23] as i8 as f32) * 0.95 + z_old * 0.05;
-        // let mag = (x * x + y * y + z * z).sqrt();
-        // println!("{}", mag);
-        println!("{}, {}", x, y);
-        gamepad.thumb_rx = (x as i16) * 256;
-        gamepad.thumb_ry = (y as i16) * 256;
+        let a_y = inputs[19] as i8 as f32;
+        let a_x = inputs[21] as i8 as f32;
+        let a_z = inputs[23] as i8 as f32;
+
+        // grav calc and smoothing
+        g_x = a_x * 0.15 + g_x * 0.85;
+        g_y = a_y * 0.15 + g_y * 0.85;
+        g_z = a_z * 0.15 + g_z * 0.85;
+
+        // calc angles
+        let mag = (g_x * g_x + g_y * g_y + g_z * g_z).sqrt();
+
+        let n_x = g_x / mag;
+        let n_y = g_y / mag;
+        let n_z = g_z / mag;
+
+        if inputs[20] == 2 {
+            // if within orig range
+            pitch = f32::atan2(n_z, f32::sqrt(n_x * n_x + n_y * n_y)).to_degrees();
+            pitch += PITCH_OFFSET;
+        } else {
+            pitch = f32::signum(pitch) * 90.0;
+        }
+
+        // if f32::abs(pitch) < 75.0 {
+        let new_roll = f32::atan2(n_x, n_y).to_degrees() + ROLL_OFFSET;
+        // let roll_mult = 1.0 - f32::abs(n_z); // as it approaches high pitch causes unstable roll
+        let roll_mult = if inputs[20] == 2 {
+            // as it approaches high pitch causes unstable roll
+            1.0 - f32::abs(n_z)
+        } else {
+            0.005
+        };
+        roll = (1.0 - roll_mult) * roll + roll_mult * new_roll;
+        // }
+
+        // if inputs[20] == 1 {
+        //     if pitch > 0.0 {
+        //         pitch = 180.0 - pitch;
+        //     } else {
+        //         pitch = -180.0 - pitch;
+        //     }
+        // }
+
+        // println!("{}, {}", pitch, roll);
+
+        gamepad.thumb_ry = (pitch * 300.0) as i16;
+        gamepad.thumb_rx = (roll * -300.0) as i16;
+
+        // let
 
         // [25] N/A?
 
@@ -188,10 +234,6 @@ async fn main() -> anyhow::Result<()> {
 
         // Update the target
         let _ = target.update(&gamepad);
-
-        x_old = x;
-        y_old = y;
-        z_old = z;
     }
 }
 
